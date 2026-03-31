@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-ACCOUNT_ID=$(036475471569)
+ACCOUNT_ID="036475471569"
 REGION="us-east-1"
 BUCKET="observability-uat-${ACCOUNT_ID}"
 
