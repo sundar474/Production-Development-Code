@@ -1,0 +1,164 @@
+networks:
+  observability:
+    name: observability
+    driver: bridge
+
+volumes:
+  grafana-data:
+  loki-data:
+  tempo-data:
+  prometheus-data:
+
+services:
+
+  node-exporter:
+    build:
+      context: ./docker/node-exporter
+      dockerfile: Dockerfile
+    container_name: node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - observability
+
+  prometheus:
+    build:
+      context: ./docker/prometheus
+      dockerfile: Dockerfile
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - observability
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: loki
+    restart: unless-stopped
+    user: root
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./config/loki/loki-local.yml:/etc/loki/config.yml:ro
+      - loki-data:/tmp/loki
+    command: -config.file=/etc/loki/config.yml
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - observability
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: tempo
+    restart: unless-stopped
+    user: root
+    ports:
+      - "3200:3200"
+      - "4317"
+      - "4318"
+    volumes:
+      - ./config/tempo/tempo-local.yml:/etc/tempo/config.yml:ro
+      - tempo-data:/var/tempo
+    command: -config.file=/etc/tempo/config.yml
+    networks:
+      - observability
+
+  alloy:
+    build:
+      context: ./docker/alloy
+      dockerfile: Dockerfile
+    container_name: alloy
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "12345:12345"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TEMPO_ENDPOINT=tempo:4317
+      - PROMETHEUS_ENDPOINT=http://prometheus:9090/api/v1/write
+      - LOKI_ENDPOINT=http://loki:3100/loki/api/v1/push
+      - NODE_EXPORTER_ADDR=node-exporter:9100
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    depends_on:
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    networks:
+      - observability
+
+  thanos-sidecar:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: thanos-sidecar
+    restart: unless-stopped
+    command:
+      - sidecar
+      - --tsdb.path=/prometheus
+      - --prometheus.url=http://prometheus:9090
+      - --grpc-address=0.0.0.0:10901
+      - --http-address=0.0.0.0:10902
+      - --objstore.config-file=/etc/thanos/bucket.yml
+    volumes:
+      - prometheus-data:/prometheus:ro
+      - ./config/thanos/bucket-local.yml:/etc/thanos/bucket.yml:ro
+    depends_on:
+      - prometheus
+    networks:
+      - observability
+
+  thanos-query:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: thanos-query
+    restart: unless-stopped
+    command:
+      - query
+      - --grpc-address=0.0.0.0:10901
+      - --http-address=0.0.0.0:10902
+      - --endpoint=thanos-sidecar:10901
+      - --query.replica-label=replica
+    ports:
+      - "10902:10902"
+    depends_on:
+      - thanos-sidecar
+    networks:
+      - observability
+
+  grafana:
+    build:
+      context: ./docker/grafana
+      dockerfile: Dockerfile
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - observability
