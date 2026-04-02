@@ -6,8 +6,8 @@
   ],
   "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
   "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
-  "cpu": "1024",
-  "memory": "2048",
+  "cpu": "512",
+  "memory": "512",
   "volumes": [
     {
       "name": "grafana-efs",
@@ -26,6 +26,8 @@
       "name": "grafana",
       "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/grafana:latest",
       "essential": true,
+      "cpu": 512,
+      "memory": 512,
       "portMappings": [
         {
           "containerPort": 3000,

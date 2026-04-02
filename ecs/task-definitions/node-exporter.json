@@ -7,7 +7,7 @@
   "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
   "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
   "cpu": "256",
-  "memory": "512",
+  "memory": "256",
   "pidMode": "host",
   "volumes": [
     {
@@ -34,6 +34,8 @@
       "name": "node-exporter",
       "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/node-exporter:latest",
       "essential": true,
+      "cpu": 256,
+      "memory": 256,
       "portMappings": [
         {
           "containerPort": 9100,
@@ -66,6 +68,16 @@
           "awslogs-stream-prefix": "node-exporter",
           "awslogs-create-group": "true"
         }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"
+        ],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
       }
     }
   ]

@@ -6,8 +6,8 @@
   ],
   "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
   "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
-  "cpu": "2048",
-  "memory": "4096",
+  "cpu": "768",
+  "memory": "1280",
   "volumes": [
     {
       "name": "prometheus-data",
@@ -21,6 +21,8 @@
       "name": "prometheus",
       "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/prometheus:latest",
       "essential": true,
+      "cpu": 512,
+      "memory": 1024,
       "portMappings": [
         {
           "containerPort": 9090,
@@ -48,9 +50,9 @@
           "CMD-SHELL",
           "wget --no-verbose --tries=1 --spider http://localhost:9090/-/ready || exit 1"
         ],
-        "interval": 15,
+        "interval": 10,
         "timeout": 5,
-        "retries": 3,
+        "retries": 5,
         "startPeriod": 30
       }
     },
@@ -58,13 +60,25 @@
       "name": "thanos-sidecar",
       "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/thanos:latest",
       "essential": false,
+      "cpu": 256,
+      "memory": 256,
       "command": [
         "sidecar",
         "--tsdb.path=/prometheus",
         "--prometheus.url=http://localhost:9090",
         "--grpc-address=0.0.0.0:10901",
         "--http-address=0.0.0.0:10902",
-        "--objstore.config-file=/etc/thanos/bucket.yml"
+        "--objstore.config=/etc/thanos/bucket.yml"
+      ],
+      "environment": [
+        {
+          "name": "S3_BUCKET",
+          "value": "observability-uat-036475471569"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        }
       ],
       "portMappings": [
         {
@@ -83,14 +97,10 @@
           "readOnly": true
         }
       ],
-      "environment": [
+      "dependsOn": [
         {
-          "name": "S3_BUCKET",
-          "value": "observability-uat-036475471569"
-        },
-        {
-          "name": "AWS_REGION",
-          "value": "us-east-1"
+          "containerName": "prometheus",
+          "condition": "HEALTHY"
         }
       ],
       "logConfiguration": {

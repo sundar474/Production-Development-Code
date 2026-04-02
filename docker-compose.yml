@@ -9,7 +9,22 @@ volumes:
   tempo-data:
   prometheus-data:
 
+    # ─────────────────────────────────────────────────────────────
+    # Startup order:
+    #   node-exporter (independent)
+    #       ↓
+    #   prometheus  loki  tempo
+    #       ↓        ↓      ↓
+    #   thanos-sidecar  alloy
+    #       ↓
+    #   thanos-query
+    #       ↓
+    #   grafana
+    # ─────────────────────────────────────────────────────────────
+
 services:
+
+  # ── Layer 1: independent, no deps ────────────────────────
 
   node-exporter:
     build:
@@ -24,22 +39,17 @@ services:
       - /:/rootfs:ro
     networks:
       - observability
-
-  prometheus:
-    build:
-      context: ./docker/prometheus
-      dockerfile: Dockerfile
-    container_name: prometheus
-    restart: unless-stopped
-    volumes:
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - observability
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   loki:
-    image: grafana/loki:3.3.2
+    build:
+      context: ./docker/loki
+      dockerfile: Dockerfile
     container_name: loki
     restart: unless-stopped
     user: root
@@ -49,16 +59,19 @@ services:
       - ./config/loki/loki-local.yml:/etc/loki/config.yml:ro
       - loki-data:/tmp/loki
     command: -config.file=/etc/loki/config.yml
+    networks:
+      - observability
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - observability
+      start_period: 30s
 
   tempo:
-    image: grafana/tempo:2.6.1
+    build:
+      context: ./docker/tempo
+      dockerfile: Dockerfile
     container_name: tempo
     restart: unless-stopped
     user: root
@@ -72,6 +85,66 @@ services:
     command: -config.file=/etc/tempo/config.yml
     networks:
       - observability
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3200/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Layer 2: depends on node-exporter healthy ─────────────
+
+  prometheus:
+    build:
+      context: ./docker/prometheus
+      dockerfile: Dockerfile
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - observability
+    depends_on:
+      node-exporter:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Layer 3: depends on prometheus healthy ────────────────
+
+  thanos-sidecar:
+    image: quay.io/thanos/thanos:v0.35.1
+    container_name: thanos-sidecar
+    restart: unless-stopped
+    command:
+      - sidecar
+      - --tsdb.path=/prometheus
+      - --prometheus.url=http://prometheus:9090
+      - --grpc-address=0.0.0.0:10901
+      - --http-address=0.0.0.0:10902
+      - --objstore.config-file=/etc/thanos/bucket.yml
+    volumes:
+      - prometheus-data:/prometheus:ro
+      - ./config/thanos/bucket-local.yml:/etc/thanos/bucket.yml:ro
+    networks:
+      - observability
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:10902/-/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Layer 4: depends on loki + tempo + prometheus healthy ─
 
   alloy:
     build:
@@ -96,34 +169,23 @@ services:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
+    networks:
+      - observability
     depends_on:
       loki:
         condition: service_healthy
       tempo:
-        condition: service_started
+        condition: service_healthy
       prometheus:
-        condition: service_started
-    networks:
-      - observability
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:12345/-/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  thanos-sidecar:
-    image: quay.io/thanos/thanos:v0.35.1
-    container_name: thanos-sidecar
-    restart: unless-stopped
-    command:
-      - sidecar
-      - --tsdb.path=/prometheus
-      - --prometheus.url=http://prometheus:9090
-      - --grpc-address=0.0.0.0:10901
-      - --http-address=0.0.0.0:10902
-      - --objstore.config-file=/etc/thanos/bucket.yml
-    volumes:
-      - prometheus-data:/prometheus:ro
-      - ./config/thanos/bucket-local.yml:/etc/thanos/bucket.yml:ro
-    depends_on:
-      - prometheus
-    networks:
-      - observability
+  # ── Layer 5: depends on thanos-sidecar healthy ───────────
 
   thanos-query:
     image: quay.io/thanos/thanos:v0.35.1
@@ -137,10 +199,19 @@ services:
       - --query.replica-label=replica
     ports:
       - "10902:10902"
-    depends_on:
-      - thanos-sidecar
     networks:
       - observability
+    depends_on:
+      thanos-sidecar:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:10902/-/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Layer 6: depends on everything healthy ────────────────
 
   grafana:
     build:
@@ -156,9 +227,14 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=false
     volumes:
       - grafana-data:/var/lib/grafana
-    depends_on:
-      - prometheus
-      - loki
-      - tempo
     networks:
       - observability
+    depends_on:
+      alloy:
+        condition: service_healthy
+      thanos-query:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy

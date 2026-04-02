@@ -6,13 +6,15 @@
   ],
   "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
   "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
-  "cpu": "2048",
-  "memory": "6144",
+  "cpu": "512",
+  "memory": "1024",
   "containerDefinitions": [
     {
       "name": "loki",
       "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/loki:latest",
       "essential": true,
+      "cpu": 512,
+      "memory": 1024,
       "portMappings": [
         {
           "containerPort": 3100,
