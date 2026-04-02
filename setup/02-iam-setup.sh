@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT_ID="036475471569"
 REGION="us-east-1"
-BUCKET="observability-uat-${ACCOUNT_ID}"
+BUCKET="observability-uat-036475471569"
 
 echo "Creating IAM roles..."
 
