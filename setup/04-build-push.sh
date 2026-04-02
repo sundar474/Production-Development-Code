@@ -2,7 +2,7 @@
 set -e
 
 REGION="us-east-1"
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT_ID="036475471569"
 ECR_BASE="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 echo "Logging in to ECR..."
