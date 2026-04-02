@@ -10,7 +10,7 @@ SECURITY_GROUP_ID="sg-0d561b7312143d996"
 echo "Replacing placeholders in task definitions..."
 
 for FILE in ./ecs/task-definitions/*.json; do
-  sed -i "s/<ACCOUNT_ID>/${ACCOUNT_ID}/g" "${FILE}"
+  sed -i "s/036475471569/${ACCOUNT_ID}/g" "${FILE}"
 done
 
 echo "Registering ECS task definitions..."

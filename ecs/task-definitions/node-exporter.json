@@ -1,37 +1,70 @@
 {
   "family": "observability-node-exporter",
   "networkMode": "host",
-  "requiresCompatibilities": ["EC2"],
-  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-task-role",
-  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-execution-role",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
   "cpu": "256",
   "memory": "512",
   "pidMode": "host",
   "volumes": [
-    {"name": "proc", "host": {"sourcePath": "/proc"}},
-    {"name": "sys",  "host": {"sourcePath": "/sys"}},
-    {"name": "root", "host": {"sourcePath": "/"}}
+    {
+      "name": "proc",
+      "host": {
+        "sourcePath": "/proc"
+      }
+    },
+    {
+      "name": "sys",
+      "host": {
+        "sourcePath": "/sys"
+      }
+    },
+    {
+      "name": "root",
+      "host": {
+        "sourcePath": "/"
+      }
+    }
   ],
   "containerDefinitions": [
     {
       "name": "node-exporter",
-      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/observability/node-exporter:latest",
+      "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/node-exporter:latest",
       "essential": true,
       "portMappings": [
-        {"containerPort": 9100, "hostPort": 9100, "protocol": "tcp"}
+        {
+          "containerPort": 9100,
+          "hostPort": 9100,
+          "protocol": "tcp"
+        }
       ],
       "mountPoints": [
-        {"sourceVolume": "proc", "containerPath": "/host/proc", "readOnly": true},
-        {"sourceVolume": "sys",  "containerPath": "/host/sys",  "readOnly": true},
-        {"sourceVolume": "root", "containerPath": "/rootfs",    "readOnly": true}
+        {
+          "sourceVolume": "proc",
+          "containerPath": "/host/proc",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "sys",
+          "containerPath": "/host/sys",
+          "readOnly": true
+        },
+        {
+          "sourceVolume": "root",
+          "containerPath": "/rootfs",
+          "readOnly": true
+        }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group":         "/ecs/observability/node-exporter",
-          "awslogs-region":        "us-east-1",
+          "awslogs-group": "/ecs/observability/node-exporter",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "node-exporter",
-          "awslogs-create-group":  "true"
+          "awslogs-create-group": "true"
         }
       }
     }

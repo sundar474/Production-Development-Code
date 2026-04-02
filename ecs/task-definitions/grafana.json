@@ -1,7 +1,9 @@
 {
   "family": "observability-grafana",
   "networkMode": "awsvpc",
-  "requiresCompatibilities": ["EC2"],
+  "requiresCompatibilities": [
+    "EC2"
+  ],
   "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-task-role",
   "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-execution-role",
   "cpu": "1024",
@@ -10,7 +12,7 @@
     {
       "name": "grafana-efs",
       "efsVolumeConfiguration": {
-        "fileSystemId": "<EFS_FILESYSTEM_ID>",
+        "fileSystemId": "fs-0472d91d201b45e43",
         "rootDirectory": "/grafana",
         "transitEncryption": "ENABLED"
       }
@@ -22,14 +24,32 @@
       "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/observability/grafana:latest",
       "essential": true,
       "portMappings": [
-        {"containerPort": 3000, "protocol": "tcp"}
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
       ],
       "environment": [
-        {"name": "GF_SECURITY_ADMIN_USER",     "value": "admin"},
-        {"name": "GF_SECURITY_ADMIN_PASSWORD", "value": "changeme"},
-        {"name": "GF_AUTH_ANONYMOUS_ENABLED",  "value": "false"},
-        {"name": "GF_SERVER_ROOT_URL",         "value": "http://grafana.observability.local:3000"},
-        {"name": "GF_FEATURE_TOGGLES_ENABLE",  "value": "traceqlEditor"}
+        {
+          "name": "GF_SECURITY_ADMIN_USER",
+          "value": "admin"
+        },
+        {
+          "name": "GF_SECURITY_ADMIN_PASSWORD",
+          "value": "changeme"
+        },
+        {
+          "name": "GF_AUTH_ANONYMOUS_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "GF_SERVER_ROOT_URL",
+          "value": "http://grafana.observability.local:3000"
+        },
+        {
+          "name": "GF_FEATURE_TOGGLES_ENABLE",
+          "value": "traceqlEditor"
+        }
       ],
       "mountPoints": [
         {
@@ -41,14 +61,17 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group":         "/ecs/observability/grafana",
-          "awslogs-region":        "us-east-1",
+          "awslogs-group": "/ecs/observability/grafana",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "grafana",
-          "awslogs-create-group":  "true"
+          "awslogs-create-group": "true"
         }
       },
       "healthCheck": {
-        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"],
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"
+        ],
         "interval": 15,
         "timeout": 5,
         "retries": 3,

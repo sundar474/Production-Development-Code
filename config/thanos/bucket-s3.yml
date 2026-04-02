@@ -1,6 +1,6 @@
 type: S3
 config:
-  bucket: observability-uat-<ACCOUNT_ID>
+  bucket: observability-uat-036475471569
   endpoint: s3.us-east-1.amazonaws.com
   region: us-east-1
   insecure: false
