@@ -2,10 +2,10 @@
 set -e
 
 REGION="us-east-1"
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-CLUSTER="<CLUSTER_NAME>"
-SUBNET_ID="<YOUR_SUBNET_ID>"
-SECURITY_GROUP_ID="<YOUR_SECURITY_GROUP_ID>"
+ACCOUNT_ID="036475471569"
+CLUSTER="PGS-test-cluster"
+SUBNET_ID="subnet-034cbdba8e226f08b"
+SECURITY_GROUP_ID="sg-0d561b7312143d996"
 
 echo "Replacing placeholders in task definitions..."
 
