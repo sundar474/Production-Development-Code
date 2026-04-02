@@ -3,8 +3,8 @@ set -e
 
 REGION="us-east-1"
 ACCOUNT_ID="036475471569"
-CLUSTER="observability-stack"
-SUBNET_ID="subnet-02c46382a3cc4dee6"
+CLUSTER="observability-cluster"
+SUBNET_ID="subnet-034cbdba8e226f08b"
 SECURITY_GROUP_ID="sg-00ea474ff8684449d"
 
 echo "Replacing placeholders in task definitions..."
