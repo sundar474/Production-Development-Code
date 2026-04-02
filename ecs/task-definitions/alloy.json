@@ -1,0 +1,58 @@
+{
+  "family": "observability-alloy",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["EC2"],
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-execution-role",
+  "cpu": "1024",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "alloy",
+      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/observability/alloy:latest",
+      "essential": true,
+      "portMappings": [
+        {"containerPort": 4317, "protocol": "tcp"},
+        {"containerPort": 4318, "protocol": "tcp"},
+        {"containerPort": 12345, "protocol": "tcp"}
+      ],
+      "environment": [
+        {"name": "TEMPO_ENDPOINT",        "value": "tempo.observability.local:4317"},
+        {"name": "PROMETHEUS_ENDPOINT",   "value": "http://prometheus.observability.local:9090/api/v1/write"},
+        {"name": "LOKI_ENDPOINT",         "value": "http://loki.observability.local:3100/loki/api/v1/push"},
+        {"name": "NODE_EXPORTER_ADDR",    "value": "node-exporter.observability.local:9100"}
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "docker-sock",
+          "containerPath": "/var/run/docker.sock",
+          "readOnly": false
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group":         "/ecs/observability/alloy",
+          "awslogs-region":        "us-east-1",
+          "awslogs-stream-prefix": "alloy",
+          "awslogs-create-group":  "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:12345/-/ready || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "docker-sock",
+      "host": {
+        "sourcePath": "/var/run/docker.sock"
+      }
+    }
+  ]
+}
