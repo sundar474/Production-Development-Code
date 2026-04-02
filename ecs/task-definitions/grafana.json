@@ -4,8 +4,8 @@
   "requiresCompatibilities": [
     "EC2"
   ],
-  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-task-role",
-  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/observability-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
   "cpu": "1024",
   "memory": "2048",
   "volumes": [
@@ -14,14 +14,17 @@
       "efsVolumeConfiguration": {
         "fileSystemId": "fs-0472d91d201b45e43",
         "rootDirectory": "/grafana",
-        "transitEncryption": "ENABLED"
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {
+          "iam": "ENABLED"
+        }
       }
     }
   ],
   "containerDefinitions": [
     {
       "name": "grafana",
-      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/observability/grafana:latest",
+      "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/grafana:latest",
       "essential": true,
       "portMappings": [
         {
