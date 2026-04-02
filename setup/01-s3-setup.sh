@@ -45,7 +45,7 @@ aws s3api put-bucket-lifecycle-configuration \
         "Status": "Enabled",
         "Filter": {"Prefix": "thanos/"},
         "Transitions": [
-          {"Days": 15, "StorageClass": "STANDARD_IA"}
+          {"Days": 30, "StorageClass": "STANDARD_IA"}
         ],
         "Expiration": {"Days": 365}
       }
