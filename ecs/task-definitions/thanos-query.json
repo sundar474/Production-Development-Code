@@ -1,0 +1,56 @@
+{
+  "family": "observability-thanos-query",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
+  "cpu": "512",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "thanos-query",
+      "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/thanos:latest",
+      "essential": true,
+      "cpu": 512,
+      "memory": 512,
+      "command": [
+        "query",
+        "--grpc-address=0.0.0.0:10901",
+        "--http-address=0.0.0.0:10902",
+        "--endpoint=prometheus.observability.local:10901",
+        "--query.replica-label=replica"
+      ],
+      "portMappings": [
+        {
+          "containerPort": 10902,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 10901,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/observability/thanos-query",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "thanos-query",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:10902/-/ready || exit 1"
+        ],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 5,
+        "startPeriod": 30
+      }
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "family": "observability-prometheus",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "taskRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::036475471569:role/observability-ecs-execution-role",
+  "cpu": "768",
+  "memory": "1280",
+  "volumes": [
+    {
+      "name": "prometheus-data",
+      "host": {
+        "sourcePath": "/data/prometheus"
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "prometheus",
+      "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/prometheus:latest",
+      "essential": true,
+      "cpu": 512,
+      "memory": 1024,
+      "portMappings": [
+        {
+          "containerPort": 9090,
+          "protocol": "tcp"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "prometheus-data",
+          "containerPath": "/prometheus",
+          "readOnly": false
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/observability/prometheus",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "prometheus",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:9090/-/ready || exit 1"
+        ],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 5,
+        "startPeriod": 30
+      }
+    },
+    {
+      "name": "thanos-sidecar",
+      "image": "036475471569.dkr.ecr.us-east-1.amazonaws.com/observability/thanos:latest",
+      "essential": false,
+      "cpu": 256,
+      "memory": 256,
+      "command": [
+        "sidecar",
+        "--tsdb.path=/prometheus",
+        "--prometheus.url=http://localhost:9090",
+        "--grpc-address=0.0.0.0:10901",
+        "--http-address=0.0.0.0:10902",
+        "--objstore.config=/etc/thanos/bucket.yml"
+      ],
+      "environment": [
+        {
+          "name": "S3_BUCKET",
+          "value": "observability-uat-036475471569"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        }
+      ],
+      "portMappings": [
+        {
+          "containerPort": 10901,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 10902,
+          "protocol": "tcp"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "prometheus-data",
+          "containerPath": "/prometheus",
+          "readOnly": true
+        }
+      ],
+      "dependsOn": [
+        {
+          "containerName": "prometheus",
+          "condition": "HEALTHY"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/observability/thanos-sidecar",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "thanos-sidecar",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}
