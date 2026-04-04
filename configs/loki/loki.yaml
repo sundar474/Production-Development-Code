@@ -1,0 +1,89 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: info
+
+# ── Common config ─────────────────────────────────────────────────────────────
+common:
+  path_prefix: /loki
+  replication_factor: 2
+  ring:
+    kvstore:
+      store: memberlist
+
+# ── Memberlist for write/read coordination ────────────────────────────────────
+memberlist:
+  join_members:
+    - loki-write.local:7946
+    - loki-read.local:7946
+  dead_node_reclaim_time: 30s
+  gossip_to_dead_nodes_time: 15s
+  left_ingestor_timeout: 5m
+
+# ── Storage backend → S3 ─────────────────────────────────────────────────────
+storage_config:
+  aws:
+    s3: "s3://ap-south-1/${S3_BUCKET_NAME}"
+    region: ap-south-1
+    s3forcepathstyle: true
+
+  boltdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/boltdb-cache
+    cache_ttl: 24h
+
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+
+schema_config:
+  configs:
+    - from: "2024-01-01"
+      store: tsdb
+      object_store: s3
+      schema: v13
+      index:
+        prefix: loki_index_
+        period: 24h
+
+# ── Compactor (runs on write path) ───────────────────────────────────────────
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  delete_request_store: s3
+
+# ── Limits ────────────────────────────────────────────────────────────────────
+limits_config:
+  retention_period: 90d          # matches S3 lifecycle
+  ingestion_rate_mb: 64
+  ingestion_burst_size_mb: 128
+  max_query_series: 100000
+  max_query_parallelism: 32
+  max_streams_per_user: 0        # unlimited
+  split_queries_by_interval: 24h
+  max_chunks_per_query: 2000000
+  query_timeout: 5m
+
+# ── Query range ───────────────────────────────────────────────────────────────
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 500
+
+# ── Ruler (for log-based alerts — wired to Alertmanager if needed later) ──────
+ruler:
+  storage:
+    type: s3
+    s3:
+      bucketnames: ${S3_BUCKET_NAME}
+      region: ap-south-1
+
+# ── Target selector — set via LOKI_TARGET env var ────────────────────────────
+# write: ingester + distributor + compactor
+# read:  querier + query-frontend
+target: ${LOKI_TARGET}

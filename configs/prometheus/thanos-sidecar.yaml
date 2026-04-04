@@ -1,0 +1,18 @@
+type: S3
+config:
+  bucket: "${S3_BUCKET_NAME}"
+  endpoint: "s3.ap-south-1.amazonaws.com"
+  region: "ap-south-1"
+  # Uses IAM role attached to ECS task — no access key needed
+  insecure: false
+  signature_version2: false
+  put_user_metadata: {}
+  http_config:
+    idle_conn_timeout: 90s
+    response_header_timeout: 2m
+    insecure_skip_verify: false
+  trace:
+    enable: false
+  part_size: 134217728   # 128MB multipart upload size
+  sse_config:
+    type: "SSE-S3"

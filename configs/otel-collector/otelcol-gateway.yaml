@@ -1,0 +1,136 @@
+# OTel Collector Gateway
+# Receives from other team's services via NLB (gRPC :4317, HTTP :4318)
+# Forwards: logs → Loki, traces → Tempo, metrics → Prometheus (via Alloy)
+# Also does tail sampling, PII filtering, enrichment
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 64
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "*"
+
+processors:
+  # ── Batch for efficiency ────────────────────────────────────────────────────
+  batch:
+    timeout: 5s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  # ── Memory limiter to avoid OOM ────────────────────────────────────────────
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1500
+    spike_limit_mib: 300
+
+  # ── Resource enrichment ────────────────────────────────────────────────────
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: "${ENVIRONMENT}"
+        action: upsert
+      - key: cloud.region
+        value: "ap-south-1"
+        action: upsert
+      - key: cloud.provider
+        value: "aws"
+        action: upsert
+
+  # ── PII filtering — remove sensitive attributes ────────────────────────────
+  attributes/pii_filter:
+    actions:
+      - key: user.email
+        action: delete
+      - key: user.phone
+        action: delete
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+      - key: db.statement
+        action: hash   # hash SQL statements instead of deleting
+      - key: enduser.id
+        action: hash
+
+  # ── Tail sampling for traces ────────────────────────────────────────────────
+  # Keeps: all errors, slow requests >500ms, 10% of healthy requests
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 200
+    policies:
+      - name: errors-policy
+        type: status_code
+        status_code: { status_codes: [ERROR] }
+      - name: slow-requests
+        type: latency
+        latency: { threshold_ms: 500 }
+      - name: probabilistic-sample
+        type: probabilistic
+        probabilistic: { sampling_percentage: 10 }
+
+exporters:
+  # Logs → Loki (via Alloy or directly)
+  loki:
+    endpoint: "http://${LOKI_ENDPOINT}/loki/api/v1/push"
+    default_labels_enabled:
+      exporter: false
+      job: true
+      instance: true
+      level: true
+    tls:
+      insecure: true
+
+  # Traces → Tempo
+  otlp/tempo:
+    endpoint: "${TEMPO_ENDPOINT}"
+    tls:
+      insecure: true
+
+  # Metrics → Prometheus remote write
+  prometheusremotewrite:
+    endpoint: "${PROM_ENDPOINT}/api/v1/write"
+    tls:
+      insecure: true
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Debug (disable in production)
+  # debug:
+  #   verbosity: detailed
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes/pii_filter, tail_sampling, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes/pii_filter, batch]
+      exporters: [loki]
+
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      level: "detailed"
+      address: 0.0.0.0:8888

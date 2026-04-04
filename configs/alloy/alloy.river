@@ -1,0 +1,101 @@
+// Grafana Alloy configuration
+// Role: Pull telemetry from OTel Collector Gateway via NLB
+//       Forward logs → Loki write, traces → Tempo, metrics → Prometheus remote write
+// Two instances: AZ-A and AZ-B for HA
+
+// ── OTLP receiver (from OTel Collector Gateway) ───────────────────────────────
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+  }
+}
+
+// ── Batch processor ───────────────────────────────────────────────────────────
+otelcol.processor.batch "default" {
+  timeout          = "5s"
+  send_batch_size  = 1000
+
+  output {
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheusremotewrite.prometheus.input]
+    logs    = [otelcol.exporter.loki.default.input]
+  }
+}
+
+// ── Traces → Tempo ────────────────────────────────────────────────────────────
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = env("TEMPO_ENDPOINT")
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// ── Metrics → Prometheus remote write ────────────────────────────────────────
+otelcol.exporter.prometheusremotewrite "prometheus" {
+  endpoint {
+    url = env("PROM_REMOTE_WRITE")
+  }
+}
+
+// ── Logs → Loki ───────────────────────────────────────────────────────────────
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = string.format("%s/loki/api/v1/push", env("LOKI_WRITE_ENDPOINT"))
+  }
+  external_labels = {
+    az = env("AWS_DEFAULT_REGION"),
+  }
+}
+
+// ── Node Exporter scrape (from :9100 on same EC2 host) ────────────────────────
+prometheus.scrape "node_exporter" {
+  targets = [
+    {"__address__" = "localhost:9100"},
+  ]
+  forward_to     = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  job_name       = "node-exporter"
+}
+
+// ── Alloy self-metrics ────────────────────────────────────────────────────────
+prometheus.scrape "alloy_self" {
+  targets = [
+    {"__address__" = "localhost:12345"},
+  ]
+  forward_to     = [prometheus.remote_write.default.receiver]
+  scrape_interval = "30s"
+  job_name       = "grafana-alloy"
+}
+
+// ── Remote write to Prometheus ────────────────────────────────────────────────
+prometheus.remote_write "default" {
+  endpoint {
+    url = env("PROM_REMOTE_WRITE")
+
+    queue_config {
+      capacity             = 10000
+      max_shards           = 50
+      min_shards           = 1
+      max_samples_per_send = 2000
+      batch_send_deadline  = "5s"
+    }
+  }
+}
+
+// ── Alloy liveness ────────────────────────────────────────────────────────────
+// Alloy exposes its own UI on :12345 — accessible for debugging

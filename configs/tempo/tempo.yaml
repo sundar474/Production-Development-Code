@@ -1,0 +1,85 @@
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  log_level: info
+
+# ── Distributor: accepts traces via OTLP ─────────────────────────────────────
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+# ── Ingester ──────────────────────────────────────────────────────────────────
+ingester:
+  max_block_duration: 5m
+  trace_idle_period: 10s
+  flush_all_on_shutdown: true
+  lifecycler:
+    ring:
+      replication_factor: 1
+
+# ── Storage backend → S3 ─────────────────────────────────────────────────────
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: ${S3_BUCKET_NAME}
+      region: ap-south-1
+      path_style_access: false
+    wal:
+      path: /var/tempo/wal
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+# ── Compactor ─────────────────────────────────────────────────────────────────
+compactor:
+  compaction:
+    block_retention: 336h    # 14 days — matches S3 lifecycle
+    compacted_block_retention: 1h
+    compaction_window: 1h
+    max_block_bytes: 100_000_000
+    max_compaction_objects: 6000000
+    v2_prefetch_traces_count: 1000
+
+# ── Query frontend ────────────────────────────────────────────────────────────
+query_frontend:
+  max_retries: 2
+  search:
+    duration_slo: 5s
+    throughput_bytes_slo: 1.073741824e+09
+  trace_by_id:
+    duration_slo: 5s
+
+# ── Querier ───────────────────────────────────────────────────────────────────
+querier:
+  max_concurrent_queries: 20
+  frontend_worker:
+    frontend_address: localhost:9095
+
+# ── Memberlist ────────────────────────────────────────────────────────────────
+memberlist:
+  abort_if_cluster_join_fails: false
+  join_members: []
+
+# ── Metrics generator (service graph + span metrics) ─────────────────────────
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      environment: ${ENVIRONMENT}
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: ${PROM_REMOTE_WRITE_URL}
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+      generate_native_histograms: both

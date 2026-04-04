@@ -1,0 +1,112 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: obs-prod
+    region: ap-south-1
+    replica: $(HOSTNAME)   # unique per replica for Thanos deduplication
+
+# ── Alerting (wired to Alertmanager later if needed) ─────────────────────────
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+# ── Rule files ────────────────────────────────────────────────────────────────
+rule_files:
+  - /etc/prometheus/rules/*.yaml
+
+# ── Remote write (Alloy pushes here, Thanos sidecar also reads TSDB) ─────────
+# remote_write is not needed here — Alloy remote_writes directly
+# Thanos sidecar reads from local TSDB and ships to S3
+
+# ── Scrape configs ────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Thanos sidecar
+  - job_name: thanos-sidecar
+    static_configs:
+      - targets: ["localhost:10902"]
+
+  # ECS service discovery — scrape all tasks with prometheus port label
+  - job_name: ecs-tasks
+    ec2_sd_configs:
+      - region: ap-south-1
+        port: 9090
+        filters:
+          - name: tag:Project
+            values: ["obs"]
+    relabel_configs:
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: instance
+      - source_labels: [__meta_ec2_availability_zone]
+        target_label: az
+      - source_labels: [__meta_ec2_tag_Environment]
+        target_label: environment
+
+  # Node Exporter on all ECS EC2 hosts
+  - job_name: node-exporter
+    ec2_sd_configs:
+      - region: ap-south-1
+        port: 9100
+        filters:
+          - name: tag:Project
+            values: ["obs"]
+    relabel_configs:
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: instance
+      - source_labels: [__meta_ec2_availability_zone]
+        target_label: az
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: __address__
+        replacement: "${1}:9100"
+
+  # Grafana Alloy self-metrics (both AZs)
+  - job_name: grafana-alloy
+    ec2_sd_configs:
+      - region: ap-south-1
+        port: 12345
+        filters:
+          - name: tag:Service
+            values: ["grafana-alloy"]
+    relabel_configs:
+      - source_labels: [__meta_ec2_availability_zone]
+        target_label: az
+
+  # OTel Collector internal metrics
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+
+  # Loki write and read
+  - job_name: loki
+    static_configs:
+      - targets:
+          - "loki-write:3100"
+          - "loki-read:3100"
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "(loki-write|loki-read):.*"
+        target_label: component
+        replacement: "${1}"
+
+  # Tempo
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
+
+  # Thanos Query
+  - job_name: thanos-query
+    static_configs:
+      - targets: ["thanos-query:9091"]
+
+storage:
+  tsdb:
+    path: /prometheus
+    retention.time: 2h      # Short local retention — Thanos sidecar ships to S3
+    retention.size: 10GB
