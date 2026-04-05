@@ -42,8 +42,10 @@ resource "aws_ecs_task_definition" "alloy" {
       command = [
         "run",
         "--server.http.listen-addr=0.0.0.0:12345",
+        "--storage.path=/var/lib/alloy",
+        "--stability.level=generally-available",
         "/etc/alloy/config.alloy",
-      ]
+      ]  
 
       portMappings = [
         { containerPort = 4317,  protocol = "tcp" },
