@@ -1,0 +1,62 @@
+export OBSERVABILITY_BUCKET=observability-uat-036475471569
+
+036475471569
+036475471569
+IAM roles created:
+  Execution role: arn:aws:iam::036475471569:role/observability-ecs-execution-role
+  Task role:      arn:aws:iam::036475471569:role/observability-ecs-task-role
+
+ECR base URI: 036475471569.dkr.ecr.us-east-1.amazonaws.com
+Export this for build-push script:
+export ECR_BASE=036475471569.dkr.ecr.us-east-1.amazonaws.com
+
+fs-0472d91d201b45e43
+
+
+aws ec2 associate-iam-instance-profile \
+  --instance-id i-022effd14daa0b62c \
+  --iam-instance-profile Name=ecsInstanceRole
+
+  
+  
+sudo mkdir -p /etc/ecs
+sudo bash -c 'cat > /etc/ecs/ecs.config <<EOF
+ECS_CLUSTER=observability-stack
+ECS_ENABLE_TASK_IAM_ROLE=true
+ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true
+ECS_LOGFILE=/var/log/ecs/ecs-agent.log
+ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+EOF'
+for CLUSTER in PGS-test-cluster observability-stack; do
+  SERVICES=$(aws ecs list-services \
+    --cluster $CLUSTER \
+    --region us-east-1 \
+    --query "serviceArns[]" \
+    --output text 2>/dev/null)
+  for SERVICE in $SERVICES; do
+    aws ecs delete-service \
+      --cluster $CLUSTER \
+      --service $SERVICE \
+      --force \
+      --region us-east-1 > /dev/null \
+      && echo "Deleted: $SERVICE"
+  done
+done
+
+
+
+for CLUSTER in observability-cluster; do
+  SERVICES=$(aws ecs list-services \
+    --cluster $CLUSTER \
+    --region us-east-1 \
+    --query "serviceArns[]" \
+    --output text 2>/dev/null)
+  for SERVICE in $SERVICES; do
+    aws ecs delete-service \
+      --cluster $CLUSTER \
+      --service $SERVICE \
+      --force \
+      --region us-east-1 > /dev/null \
+      && echo "Deleted: $SERVICE"
+  done
+done
