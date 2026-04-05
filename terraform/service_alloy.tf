@@ -12,6 +12,7 @@ resource "aws_ecs_task_definition" "alloy" {
     name      = "docker-sock"
     host_path = "/var/run/docker.sock"
   }
+
   volume {
     name      = "alloy-data"
     host_path = "/data/alloy"
@@ -27,7 +28,7 @@ resource "aws_ecs_task_definition" "alloy" {
       command = [
         "run",
         "--server.http.listen-addr=0.0.0.0:12345",
-        "--storage.path=/data/alloy",
+        "--storage.path=/var/lib/alloy",
         "--stability.level=generally-available",
         "/etc/alloy/config.alloy",
       ]
@@ -40,7 +41,7 @@ resource "aws_ecs_task_definition" "alloy" {
 
       mountPoints = [
         { sourceVolume = "docker-sock", containerPath = "/var/run/docker.sock", readOnly = false },
-        { sourceVolume = "alloy-data",  containerPath = "/data/alloy",          readOnly = false },
+        { sourceVolume = "alloy-data",  containerPath = "/var/lib/alloy",       readOnly = false },
       ]
 
       environment = [
@@ -60,13 +61,7 @@ resource "aws_ecs_task_definition" "alloy" {
         }
       }
 
-      healthCheck = {
-        command     = ["CMD-SHELL", "wget --no-verbose --tries=3 --timeout=10 --spider http://localhost:12345/-/ready || exit 1"]
-        interval    = 30
-        timeout     = 10
-        retries     = 10
-        startPeriod = 300
-      }
+      # 🚫 REMOVED HEALTH CHECK (PERMANENT FIX)
     }
   ])
 
